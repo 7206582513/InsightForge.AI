@@ -1,0 +1,47 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Environment & secrets
+.env
+*.env
+config.py
+credentials.json
+.groq_key.txt
+
+# Flask & PyCharm specific
+instance/
+*.log
+*.pot
+*.pyc
+
+# PDF and chart outputs
+outputs/
+uploads/
+static/charts/
+*.pdf
+*.csv
+*.xlsx
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE configs
+.vscode/
+.idea/
+*.swp
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints/
+
+# pip cache
+pip-wheel-metadata/

@@ -1,0 +1,14 @@
+Flask==2.3.2
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.4.2
+matplotlib==3.7.4
+seaborn==0.12.2
+fpdf==1.7.2
+opencv-python-headless==4.9.0.80
+pytesseract==0.3.10
+pdf2image==1.17.0
+imbalanced-learn==0.11.0
+xgboost==2.0.3
+requests==2.31.0
+statsmodels==0.14.1

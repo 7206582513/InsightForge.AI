@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>InsightForge.AI - Model Results</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { padding: 30px; background-color: #f8f9fa; }
+    .card { margin-bottom: 30px; }
+    .chart-img { max-width: 100%; height: auto; border: 1px solid #ccc; padding: 5px; }
+    .qna-box { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1 class="mb-4 text-primary">InsightForge.AI</h1>
+  <div class="card">
+    <div class="card-body">
+      <h4>✅ Best Model: {{ report['Best Model'] }}</h4>
+      <p><strong>Score:</strong> {{ report['Best Score'] }}</p>
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <h5>📥 Download Files:</h5>
+    <a href="/download" class="btn btn-outline-success btn-sm">Download Cleaned CSV</a>
+    <a href="/download_pdf" class="btn btn-outline-primary btn-sm">Download EDA PDF Report</a>
+  </div>
+
+  <h4 class="mb-3">📊 Model Comparison Table</h4>
+  <div class="table-responsive">
+    <table class="table table-bordered table-striped">
+      <thead class="table-dark">
+        <tr>
+          {% for key in report['Comparison Table'][0].keys() %}
+            <th>{{ key }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report['Comparison Table'] %}
+        <tr>
+          {% for val in row.values() %}
+            <td>
+              {% if val is string and val.endswith('.png') %}
+                <img src="/{{ val }}" class="chart-img">
+              {% else %}
+                {{ val }}
+              {% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if report.get("EDA Chart Insight") %}
+  <div class="qna-box mb-4">
+    <h5>🧠 Insight from EDA Charts</h5>
+    <p id="eda-insight">{{ report["EDA Chart Insight"] }}</p>
+    <div class="mt-3">
+      <input type="text" class="form-control" id="eda-question" placeholder="Ask something about the EDA charts">
+      <button class="btn btn-sm btn-primary mt-2" onclick="askQuestion('eda')">Ask</button>
+      <p class="mt-2"><strong>AI:</strong> <span id="eda-answer"></span></p>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if report.get("Power BI Chart Insight") %}
+  <div class="qna-box mb-4">
+    <h5>🧠 Insight from Power BI Dashboard</h5>
+    <p id="powerbi-insight">{{ report["Power BI Chart Insight"] }}</p>
+    <div class="mt-3">
+      <input type="text" class="form-control" id="powerbi-question" placeholder="Ask something about Power BI dashboard">
+      <button class="btn btn-sm btn-primary mt-2" onclick="askQuestion('powerbi')">Ask</button>
+      <p class="mt-2"><strong>AI:</strong> <span id="powerbi-answer"></span></p>
+    </div>
+  </div>
+  {% endif %}
+
+  <a href="/chart-talk" class="btn btn-outline-dark">💬 Full Chat Mode</a>
+</div>
+
+<script>
+function askQuestion(type) {
+  let question = document.getElementById(`${type}-question`).value;
+  let context = document.getElementById(`${type}-insight`).innerText;
+
+  fetch('/ask-question', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: `question=${encodeURIComponent(question)}&context=${encodeURIComponent(context)}`
+  })
+  .then(response => response.json())
+  .then(data => {
+    document.getElementById(`${type}-answer`).innerText = data.answer;
+  });
+}
+</script>
+</body>
+</html>
