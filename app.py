@@ -1,5 +1,7 @@
 # === Unified Flask App: InsightForge AI Assistant ===
 
+# === Unified Flask App: InsightForge AI Assistant ===
+
 from flask import Flask, render_template, request, send_file, session
 import os
 import pandas as pd
@@ -9,11 +11,14 @@ import numpy as np
 import requests
 from werkzeug.utils import secure_filename
 from pdf2image import convert_from_bytes
+from modules.eda_pipeline import auto_eda_pipeline
+from modules.model_pipeline import train_best_model
+from modules.insight_refiner import generate_questions, clean_and_structure
 
 # === Configuration ===
 UPLOAD_FOLDER = 'uploads'
 OUTPUT_FOLDER = 'outputs'
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "YOUR_GROQ_API_KEY"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama3-8b-8192"
 pytesseract.pytesseract.tesseract_cmd = r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
@@ -26,10 +31,7 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.secret_key = SECRET_KEY
 
-from modules.eda_pipeline import auto_eda_pipeline
-from modules.model_pipeline import train_best_model
-
-# === PDF Chart OCR Utilities ===
+# === Chart OCR Utilities ===
 def extract_chart_regions(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
@@ -38,7 +40,7 @@ def extract_chart_regions(image):
     for c in contours:
         x, y, w, h = cv2.boundingRect(c)
         if w > 200 and h > 150:
-            chart_img = image[y:y+h, x:x+w]
+            chart_img = image[y:y + h, x:x + w]
             cropped.append(chart_img)
     return cropped
 
@@ -55,7 +57,6 @@ def extract_text_from_pdf(file_path):
         cropped_charts = extract_chart_regions(np_img)
         for chart_img in cropped_charts:
             full_text += ocr_chart(chart_img) + "\n"
-    print("🔍 Extracted Chart Text:\n", full_text)
     return full_text
 
 def load_dataset(csv_path):
@@ -108,46 +109,53 @@ def upload():
         file = request.files['file']
         task_type = request.form.get('task_type')
         target_col = request.form.get('target_col')
-        pdf_file = request.files.get('pdf_file')  # Optional Power BI PDF
+        pdf_file = request.files.get('pdf_file')
 
-        if file and task_type and target_col:
-            filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-            file.save(filepath)
-            df = pd.read_csv(filepath, encoding='utf-8', engine='python')
-            df.columns = df.columns.str.strip()
-            target_col = target_col.strip()
-            if target_col not in df.columns:
-                return f"❌ Error: Target column '{target_col}' not found."
-            if target_col.lower() == 'price':
-                df[target_col] = df[target_col].astype(str).str.replace(',', '').replace({'Ask For Price': None})
-                df[target_col] = pd.to_numeric(df[target_col], errors='coerce')
-            clean_df, eda_summary = auto_eda_pipeline(df, task_type=task_type, target_col=target_col)
-            clean_path = os.path.join(OUTPUT_FOLDER, "cleaned_data.csv")
-            clean_df.to_csv(clean_path, index=False)
-            best_model, report = train_best_model(clean_df, task_type=task_type)
+        if not (file and task_type and target_col):
+            return "❌ Missing required fields."
 
-            # === Extract insight from EDA chart PDF itself ===
-            eda_pdf_path = "outputs/eda_report.pdf"
-            if os.path.exists(eda_pdf_path):
-                eda_chart_text = extract_text_from_pdf(eda_pdf_path)
-                eda_chart_insight = generate_insight_with_llm(eda_chart_text, clean_df)
-                report["EDA Chart Insight"] = eda_chart_insight
+        filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(filepath)
+        df = pd.read_csv(filepath, encoding='utf-8', engine='python')
+        df.columns = df.columns.str.strip()
+        target_col = target_col.strip()
 
-            # === Optional additional PDF uploaded by user ===
-            if pdf_file:
-                pdf_path = os.path.join(UPLOAD_FOLDER, secure_filename(pdf_file.filename))
-                pdf_file.save(pdf_path)
-                extra_chart_text = extract_text_from_pdf(pdf_path)
-                extra_chart_insight = generate_insight_with_llm(extra_chart_text, clean_df)
-                report["Power BI Chart Insight"] = extra_chart_insight
+        if target_col not in df.columns:
+            return f"❌ Error: Target column '{target_col}' not found."
 
-            return render_template("result.html", report=report, clean_path=clean_path)
-        return "❌ Missing required fields."
+        if target_col.lower() == 'price':
+            df[target_col] = df[target_col].astype(str).str.replace(',', '').replace({'Ask For Price': None})
+            df[target_col] = pd.to_numeric(df[target_col], errors='coerce')
+
+        clean_df, eda_summary = auto_eda_pipeline(df, task_type=task_type, target_col=target_col)
+        clean_path = os.path.join(OUTPUT_FOLDER, "cleaned_data.csv")
+        clean_df.to_csv(clean_path, index=False)
+        best_model, report = train_best_model(clean_df, task_type=task_type)
+
+        # === Insight from EDA report PDF ===
+        eda_pdf_path = "outputs/eda_report.pdf"
+        if os.path.exists(eda_pdf_path):
+            eda_chart_text = extract_text_from_pdf(eda_pdf_path)
+            eda_insight = generate_insight_with_llm(eda_chart_text, clean_df)
+            report["EDA Chart Insight"] = clean_and_structure(eda_insight)
+            report["EDA Suggested Questions"] = generate_questions(eda_insight)
+
+        # === Insight from additional Power BI PDF ===
+        if pdf_file:
+            pdf_path = os.path.join(UPLOAD_FOLDER, secure_filename(pdf_file.filename))
+            pdf_file.save(pdf_path)
+            powerbi_text = extract_text_from_pdf(pdf_path)
+            powerbi_insight = generate_insight_with_llm(powerbi_text, clean_df)
+            report["Power BI Chart Insight"] = clean_and_structure(powerbi_insight)
+            report["PowerBI Suggested Questions"] = generate_questions(powerbi_insight)
+
+        return render_template("result.html", report=report, clean_path=clean_path)
+
     except Exception as e:
         return f"❌ Error: {str(e)}"
 
 @app.route('/chart-talk', methods=['GET', 'POST'])
-def index():
+def chart_talk():
     if 'chat_history' not in session:
         session['chat_history'] = []
 
@@ -189,7 +197,6 @@ def ask_question():
     except Exception as e:
         return {'answer': f"Error: {str(e)}"}
 
-
 @app.route('/download')
 def download():
     return send_file(os.path.join(OUTPUT_FOLDER, 'cleaned_data.csv'), as_attachment=True)
@@ -197,7 +204,6 @@ def download():
 @app.route('/download_pdf')
 def download_pdf():
     return send_file("outputs/eda_report.pdf", as_attachment=True)
-
 
 if __name__ == '__main__':
     app.run(debug=True)

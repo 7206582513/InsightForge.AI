@@ -14,6 +14,8 @@
 <body>
 <div class="container">
   <h1 class="mb-4 text-primary">InsightForge.AI</h1>
+
+  <!-- Best Model -->
   <div class="card">
     <div class="card-body">
       <h4>✅ Best Model: {{ report['Best Model'] }}</h4>
@@ -21,12 +23,14 @@
     </div>
   </div>
 
+  <!-- Download Buttons -->
   <div class="mb-4">
     <h5>📥 Download Files:</h5>
     <a href="/download" class="btn btn-outline-success btn-sm">Download Cleaned CSV</a>
     <a href="/download_pdf" class="btn btn-outline-primary btn-sm">Download EDA PDF Report</a>
   </div>
 
+  <!-- Model Comparison Table -->
   <h4 class="mb-3">📊 Model Comparison Table</h4>
   <div class="table-responsive">
     <table class="table table-bordered table-striped">
@@ -55,10 +59,21 @@
     </table>
   </div>
 
+  <!-- EDA Insight Section -->
   {% if report.get("EDA Chart Insight") %}
   <div class="qna-box mb-4">
     <h5>🧠 Insight from EDA Charts</h5>
     <p id="eda-insight">{{ report["EDA Chart Insight"] }}</p>
+
+    {% if report["EDA Suggested Questions"] %}
+      <h6 class="text-muted">💡 Suggested Questions</h6>
+      <ul>
+        {% for q in report["EDA Suggested Questions"] %}
+          <li>{{ q }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
     <div class="mt-3">
       <input type="text" class="form-control" id="eda-question" placeholder="Ask something about the EDA charts">
       <button class="btn btn-sm btn-primary mt-2" onclick="askQuestion('eda')">Ask</button>
@@ -67,10 +82,21 @@
   </div>
   {% endif %}
 
+  <!-- Power BI Insight Section -->
   {% if report.get("Power BI Chart Insight") %}
   <div class="qna-box mb-4">
     <h5>🧠 Insight from Power BI Dashboard</h5>
     <p id="powerbi-insight">{{ report["Power BI Chart Insight"] }}</p>
+
+    {% if report["PowerBI Suggested Questions"] %}
+      <h6 class="text-muted">💡 Suggested Questions</h6>
+      <ul>
+        {% for q in report["PowerBI Suggested Questions"] %}
+          <li>{{ q }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
     <div class="mt-3">
       <input type="text" class="form-control" id="powerbi-question" placeholder="Ask something about Power BI dashboard">
       <button class="btn btn-sm btn-primary mt-2" onclick="askQuestion('powerbi')">Ask</button>
@@ -79,6 +105,7 @@
   </div>
   {% endif %}
 
+  <!-- Link to Full Chat -->
   <a href="/chart-talk" class="btn btn-outline-dark">💬 Full Chat Mode</a>
 </div>
 
