@@ -1,7 +1,5 @@
 # === Unified Flask App: InsightForge AI Assistant ===
 
-# === Unified Flask App: InsightForge AI Assistant ===
-
 from flask import Flask, render_template, request, send_file, session
 import os
 import pandas as pd
@@ -11,6 +9,7 @@ import numpy as np
 import requests
 from werkzeug.utils import secure_filename
 from pdf2image import convert_from_bytes
+from langdetect import detect
 from modules.eda_pipeline import auto_eda_pipeline
 from modules.model_pipeline import train_best_model
 from modules.insight_refiner import generate_questions, clean_and_structure
@@ -18,7 +17,7 @@ from modules.insight_refiner import generate_questions, clean_and_structure
 # === Configuration ===
 UPLOAD_FOLDER = 'uploads'
 OUTPUT_FOLDER = 'outputs'
-GROQ_API_KEY = "YOUR_GROQ_API_KEY"
+GROQ_API_KEY = "Your_GROQ_API_KEY"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama3-8b-8192"
 pytesseract.pytesseract.tesseract_cmd = r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
@@ -31,7 +30,7 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.secret_key = SECRET_KEY
 
-# === Chart OCR Utilities ===
+# === OCR Utilities ===
 def extract_chart_regions(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
@@ -42,6 +41,8 @@ def extract_chart_regions(image):
         if w > 200 and h > 150:
             chart_img = image[y:y + h, x:x + w]
             cropped.append(chart_img)
+            cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    cv2.imwrite("static/charts/ocr_overlay.png", image)
     return cropped
 
 def ocr_chart(img):
@@ -78,7 +79,10 @@ You are a data analyst AI. Here is some text extracted from chart regions in a d
 
 Please generate 3-5 meaningful business insights based on trends shown in the charts.
 """
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
     payload = {
         "model": GROQ_MODEL,
         "messages": [{"role": "user", "content": prompt}],
@@ -88,8 +92,12 @@ Please generate 3-5 meaningful business insights based on trends shown in the ch
     return response.json()['choices'][0]['message']['content'] if response.status_code == 200 else f"Error: {response.text}"
 
 def ask_groq_about_chart(question, context):
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-    prompt = f"Context: {context}\n\nUser: {question}"
+    lang = detect(question)
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    prompt = f"Language: {lang.upper()}\nContext: {context}\n\nUser: {question}"
     payload = {
         "model": GROQ_MODEL,
         "messages": [{"role": "user", "content": prompt}],
@@ -98,7 +106,8 @@ def ask_groq_about_chart(question, context):
     response = requests.post(GROQ_API_URL, headers=headers, json=payload)
     return response.json()['choices'][0]['message']['content'] if response.status_code == 200 else f"Error: {response.text}"
 
-# === Routes ===
+# === ROUTES ===
+
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -159,7 +168,7 @@ def chart_talk():
     if 'chat_history' not in session:
         session['chat_history'] = []
 
-    insight = ''
+    insight = session.get("insight", "")
     if request.method == 'POST':
         if 'pdf_file' in request.files and 'csv_file' in request.files:
             pdf_file = request.files['pdf_file']
@@ -176,12 +185,18 @@ def chart_talk():
 
             session['insight'] = insight
             session['chat_history'] = []
+            session.modified = True
 
         elif request.form.get("question"):
             question = request.form.get("question")
             context = session.get("insight", "")
             reply = ask_groq_about_chart(question, context)
+
+            if 'chat_history' not in session:
+                session['chat_history'] = []
+
             session['chat_history'].append((question, reply))
+            session.modified = True
 
     return render_template('chart_talk.html',
                            insight=session.get('insight', ''),
@@ -193,9 +208,31 @@ def ask_question():
         context = request.form.get('context', '')
         question = request.form.get('question', '')
         reply = ask_groq_about_chart(question, context)
+
+        # ✅ Store into session history for both /chart-talk and /upload views
+        if 'chat_history' not in session:
+            session['chat_history'] = []
+
+        session['chat_history'].append((question, reply))
+        session.modified = True  # ✅ Required to persist in Flask
+
         return {'answer': reply}
     except Exception as e:
         return {'answer': f"Error: {str(e)}"}
+
+
+@app.route('/download_chat')
+def download_chat():
+    chat = session.get('chat_history', [])
+    if not chat:
+        return "❌ No chat history found yet. Please ask at least one question first."
+
+    file_path = os.path.join(OUTPUT_FOLDER, "chat_history.txt")
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write("🧠 InsightForge.AI - Chat Q&A History\n\n")
+        for q, a in chat:
+            f.write(f"Q: {q}\nA: {a}\n\n")
+    return send_file(file_path, as_attachment=True)
 
 @app.route('/download')
 def download():

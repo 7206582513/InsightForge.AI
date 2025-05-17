@@ -28,6 +28,7 @@
     <h5>📥 Download Files:</h5>
     <a href="/download" class="btn btn-outline-success btn-sm">Download Cleaned CSV</a>
     <a href="/download_pdf" class="btn btn-outline-primary btn-sm">Download EDA PDF Report</a>
+    <a href="/download_chat" class="btn btn-outline-secondary btn-sm">💾 Download Q&A History</a>
   </div>
 
   <!-- Model Comparison Table -->
@@ -58,6 +59,18 @@
       </tbody>
     </table>
   </div>
+
+  <!-- SHAP Plot -->
+  {% if report.get("SHAP Summary Plot") %}
+    <h4 class="mt-4">🔍 SHAP Feature Importance</h4>
+    <img src="/{{ report['SHAP Summary Plot'] }}" class="img-fluid mb-4">
+  {% endif %}
+
+  <!-- OCR Overlay Chart -->
+  {% if report.get("EDA Chart Insight") or report.get("Power BI Chart Insight") %}
+    <h5 class="mt-4">🖼️ OCR Detected Chart Regions</h5>
+    <img src="/static/charts/ocr_overlay.png" class="img-fluid mb-4">
+  {% endif %}
 
   <!-- EDA Insight Section -->
   {% if report.get("EDA Chart Insight") %}
